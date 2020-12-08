@@ -106,3 +106,37 @@ broom::tidy(fit)
 broom::glance(fit)
 ```
 
+## Diagnostics
+
+```{r}
+airbnb %>% 
+  modelr::add_residuals(fit) %>% 
+  ggplot(aes(x = boro, y = resid)) + 
+  geom_violin() +
+  ylim(-500, 1500)
+
+
+airbnb %>% 
+  modelr::add_residuals(fit) %>% 
+  ggplot(aes(x = stars, y = resid)) +
+  geom_point() + 
+  facet_wrap(. ~ boro)
+```
+
+## Hypothesis tests
+
+```{r}
+fit %>% 
+  broom::tidy()
+```
+
+What about significance of borough?
+
+```{r}
+fit_null = lm(price ~ stars, data = airbnb)
+fit_alt = lm(price ~ stars + boro, data = airbnb)
+
+anova(fit_null, fit_alt) %>% 
+  broom::tidy()
+```
+

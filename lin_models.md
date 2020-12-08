@@ -155,3 +155,61 @@ broom::glance(fit)
     ##       <dbl>         <dbl> <dbl>     <dbl>     <dbl> <dbl>   <dbl>  <dbl>  <dbl>
     ## 1    0.0342        0.0341  182.      271. 6.73e-229     4 -2.02e5 4.04e5 4.04e5
     ## # … with 3 more variables: deviance <dbl>, df.residual <int>, nobs <int>
+
+## Diagnostics
+
+``` r
+airbnb %>% 
+  modelr::add_residuals(fit) %>% 
+  ggplot(aes(x = boro, y = resid)) + 
+  geom_violin() +
+  ylim(-500, 1500)
+```
+
+    ## Warning: Removed 9993 rows containing non-finite values (stat_ydensity).
+
+<img src="lin_models_files/figure-gfm/unnamed-chunk-10-1.png" width="90%" />
+
+``` r
+airbnb %>% 
+  modelr::add_residuals(fit) %>% 
+  ggplot(aes(x = stars, y = resid)) +
+  geom_point() + 
+  facet_wrap(. ~ boro)
+```
+
+    ## Warning: Removed 9962 rows containing missing values (geom_point).
+
+<img src="lin_models_files/figure-gfm/unnamed-chunk-10-2.png" width="90%" />
+
+## Hypothesis tests
+
+``` r
+fit %>% 
+  broom::tidy()
+```
+
+    ## # A tibble: 5 x 5
+    ##   term         estimate std.error statistic   p.value
+    ##   <chr>           <dbl>     <dbl>     <dbl>     <dbl>
+    ## 1 (Intercept)      19.8     12.2       1.63 1.04e-  1
+    ## 2 stars            32.0      2.53     12.7  1.27e- 36
+    ## 3 boroBrooklyn    -49.8      2.23    -22.3  6.32e-109
+    ## 4 boroQueens      -77.0      3.73    -20.7  2.58e- 94
+    ## 5 boroBronx       -90.3      8.57    -10.5  6.64e- 26
+
+What about significance of borough?
+
+``` r
+fit_null = lm(price ~ stars, data = airbnb)
+fit_alt = lm(price ~ stars + boro, data = airbnb)
+
+anova(fit_null, fit_alt) %>% 
+  broom::tidy()
+```
+
+    ## # A tibble: 2 x 6
+    ##   res.df         rss    df     sumsq statistic    p.value
+    ##    <dbl>       <dbl> <dbl>     <dbl>     <dbl>      <dbl>
+    ## 1  30528 1030861841.    NA       NA        NA  NA        
+    ## 2  30525 1005601724.     3 25260117.      256.  7.84e-164
