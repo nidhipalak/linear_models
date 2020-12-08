@@ -33,7 +33,7 @@ options(
   ggplot2.continuous.fill = "viridis"
 )
 
-scale_color_discrete = scale_colour_viridis_d
+scale_colour_discrete = scale_colour_viridis_d
 scale_fill_discrete = scale_fill_viridis_d
 ```
 
@@ -92,14 +92,66 @@ broom::tidy(fit) %>%
   select(-std.error, -statistic) %>% 
   mutate(
     term = str_replace(term, "borough", "Boro: ")
-  )
+  ) %>% 
+  knitr::kable(digits = 3)
 ```
 
-    ## # A tibble: 5 x 3
-    ##   term          estimate  p.value
-    ##   <chr>            <dbl>    <dbl>
-    ## 1 (Intercept)      -70.4 5.14e- 7
-    ## 2 stars             32.0 1.27e-36
-    ## 3 boroBrooklyn      40.5 2.23e- 6
-    ## 4 boroManhattan     90.3 6.64e-26
-    ## 5 boroQueens        13.2 1.45e- 1
+| term          | estimate | p.value |
+| :------------ | -------: | ------: |
+| (Intercept)   | \-70.414 |   0.000 |
+| stars         |   31.990 |   0.000 |
+| boroBrooklyn  |   40.500 |   0.000 |
+| boroManhattan |   90.254 |   0.000 |
+| boroQueens    |   13.206 |   0.145 |
+
+## Be in control of factors
+
+In R, the default is for the first categorical variable, alphabetically,
+to be the reference class.
+
+Let’s change that. We will change the room type reference variable to be
+the most common within the “Room type” var.
+
+``` r
+airbnb = airbnb %>% 
+  mutate(
+    boro = fct_infreq(boro),
+    room_type = fct_infreq(room_type))
+```
+
+``` r
+airbnb %>% 
+  ggplot(aes(x = stars, y = price, color = boro)) +
+  geom_point()
+```
+
+    ## Warning: Removed 9962 rows containing missing values (geom_point).
+
+<img src="lin_models_files/figure-gfm/unnamed-chunk-8-1.png" width="90%" />
+
+We see that the model has not changed fundamentally, but reference has
+changed
+
+``` r
+fit = lm(price ~ stars + boro, data = airbnb)
+broom::tidy(fit)
+```
+
+    ## # A tibble: 5 x 5
+    ##   term         estimate std.error statistic   p.value
+    ##   <chr>           <dbl>     <dbl>     <dbl>     <dbl>
+    ## 1 (Intercept)      19.8     12.2       1.63 1.04e-  1
+    ## 2 stars            32.0      2.53     12.7  1.27e- 36
+    ## 3 boroBrooklyn    -49.8      2.23    -22.3  6.32e-109
+    ## 4 boroQueens      -77.0      3.73    -20.7  2.58e- 94
+    ## 5 boroBronx       -90.3      8.57    -10.5  6.64e- 26
+
+``` r
+broom::glance(fit)
+```
+
+    ## # A tibble: 1 x 12
+    ##   r.squared adj.r.squared sigma statistic   p.value    df  logLik    AIC    BIC
+    ##       <dbl>         <dbl> <dbl>     <dbl>     <dbl> <dbl>   <dbl>  <dbl>  <dbl>
+    ## 1    0.0342        0.0341  182.      271. 6.73e-229     4 -2.02e5 4.04e5 4.04e5
+    ## # … with 3 more variables: deviance <dbl>, df.residual <int>, nobs <int>
