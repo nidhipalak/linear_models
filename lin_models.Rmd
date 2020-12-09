@@ -140,3 +140,74 @@ anova(fit_null, fit_alt) %>%
   broom::tidy()
 ```
 
+## Nest data, fit models
+
+Whether there is an assoication between price and stars and weather it differs between boroughs.
+
+This is pretty formal and also complex.
+
+```{r}
+fit = lm(price ~ stars * boro + room_type * boro, data = airbnb)
+
+broom::tidy(fit)
+```
+
+This is more exploratory but maybe easier to understand
+
+Fit models through each list!!!
+
+In Manhattan, there is a sig association between stars and price. Pval of bronx is insignificant. We are not looking at interactions, so this is purely exploratory. 
+```{r}
+airbnb %>% 
+  nest(data = -boro) %>% 
+  mutate(
+    models = map(.x = data, ~lm(price ~ stars, data = .x)),
+    results = map(models, broom::tidy)
+  ) %>% #.x is what i am iterating across
+  #pull(results)
+  select(-data, -models) %>% 
+  unnest(results) %>% 
+  filter(term == "stars")
+```
+
+Do the same, but for roomtype
+
+```{r}
+airbnb %>% 
+  nest(data = -boro) %>% 
+  mutate(
+    models = map(.x = data, ~lm(price ~ stars + room_type, data = .x)),
+    results = map(models, broom::tidy)
+  ) %>% #.x is what i am iterating across
+  #pull(results)
+  select(-data, -models) %>% 
+  unnest(results) %>% 
+  filter(term != "(Intercept)") %>% 
+  select(boro, term, estimate) %>% 
+  pivot_wider(
+    names_from = boro,
+    values_from = estimate
+  )
+```
+
+Let's nest even more.....
+
+fit linear models for every little neighborhood in manhattan
+```{r}
+airbnb %>% 
+  filter(boro == "Manhattan") %>% 
+  nest(data = -neighborhood) %>% 
+  mutate(
+    models = map(.x = data, ~lm(price ~ stars + room_type, data = .x)),
+    results = map(models, broom::tidy)
+  ) %>% 
+  select(-data, -models) %>% 
+  unnest(results) %>% 
+  filter(str_detect(term, "room_type")) %>% 
+  ggplot(aes(x = neighborhood, y = estimate)) +
+  geom_point() +
+  facet_wrap(.~term) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+  
+```
+
