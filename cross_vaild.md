@@ -127,19 +127,99 @@ Look at prediction accuracy. Look at RMSE at testing data set.
 rmse(lin_mod, test_df)
 ```
 
-    ## [1] 1.09212
+    ## [1] 0.7812531
 
 ``` r
 rmse(smooth_mod, test_df)
 ```
 
-    ## [1] 0.3512056
+    ## [1] 0.2981603
 
 ``` r
 rmse(wiggly_mod, test_df)
 ```
 
-    ## [1] 0.3695627
+    ## [1] 0.3097464
 
 Linear: very high, does not fit model at all. Wiggly: still high, not as
 bad. Smooth: the best choice. Lowest RMSE.
+
+## Cross Validation using `modelr`
+
+``` r
+cv_df = 
+  crossv_mc(nonlin_df, 100) # we want 100 cross validations
+```
+
+What is happening here? This makes a list of 100 cross validations. We
+can pull the test and training df from each and make it a tibble
+
+``` r
+cv_df %>% pull(train) %>% .[[1]] %>% as.tibble()
+```
+
+    ## Warning: `as.tibble()` is deprecated as of tibble 2.0.0.
+    ## Please use `as_tibble()` instead.
+    ## The signature and semantics have changed, see `?as_tibble`.
+    ## This warning is displayed once every 8 hours.
+    ## Call `lifecycle::last_warnings()` to see where this warning was generated.
+
+    ## # A tibble: 79 x 3
+    ##       id     x       y
+    ##    <int> <dbl>   <dbl>
+    ##  1     1 0.218  0.625 
+    ##  2     2 0.717 -0.989 
+    ##  3     4 0.238  1.19  
+    ##  4     5 0.414  0.757 
+    ##  5     6 0.613  0.622 
+    ##  6     7 0.292  1.49  
+    ##  7     8 0.312  0.747 
+    ##  8    10 0.759 -0.789 
+    ##  9    11 0.475  0.0449
+    ## 10    12 0.162  0.936 
+    ## # … with 69 more rows
+
+``` r
+cv_df %>% pull(test) %>% .[[1]] %>% as.tibble()
+```
+
+    ## # A tibble: 21 x 3
+    ##       id      x       y
+    ##    <int>  <dbl>   <dbl>
+    ##  1     3 0.499   0.526 
+    ##  2     9 0.275   0.812 
+    ##  3    13 0.859  -2.62  
+    ##  4    16 0.358   1.38  
+    ##  5    21 0.539   0.0409
+    ##  6    24 0.0669  0.492 
+    ##  7    29 0.388   0.519 
+    ##  8    33 0.212   0.375 
+    ##  9    37 0.756  -0.929 
+    ## 10    40 0.437   0.644 
+    ## # … with 11 more rows
+
+We will convert all training and testing data sets and convert to
+tibble.
+
+``` r
+cv_df = cv_df %>% 
+mutate(train = map(train, as_tibble),
+       test = map(test, as_tibble))
+```
+
+Let’s try to fit models and get RMSEs for them
+
+``` r
+cv_df = cv_df %>% 
+  mutate(
+    linear_mod = map(.x = train, ~lm(y ~ x, data = .x)),
+    smooth_mod = map(.x = train, ~gam(y ~ s(x), data = .x)),
+    wiggly_mod = map(.x = train, ~gam(y ~ s(x, k = 30), sp = 10e-6, data = .x))) %>% 
+# i not have lists containing model info for each of the cross validations. USE map2 for TWO vars going into the map
+  mutate(
+    rmse_linear = map2(.x = linear_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_smooth = map2(.x = smooth_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_wiggly = map2(.x = wiggly_mod, .y = test, ~rmse(model = .x, data = .y))
+  )
+  #pull(rmse_linear) # this is shows all the rsme for the linear models we are cross validating.
+```

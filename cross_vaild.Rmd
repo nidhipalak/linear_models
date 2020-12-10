@@ -97,3 +97,43 @@ rmse(wiggly_mod, test_df)
 Linear: very high, does not fit model at all. 
 Wiggly: still high, not as bad.
 Smooth: the best choice. Lowest RMSE.
+
+## Cross Validation using `modelr`
+
+```{r}
+cv_df = 
+  crossv_mc(nonlin_df, 100) # we want 100 cross validations
+```
+
+What is happening here?
+This makes a list of 100 cross validations. We can pull the test and training df from each and make it a tibble
+```{r}
+cv_df %>% pull(train) %>% .[[1]] %>% as.tibble()
+cv_df %>% pull(test) %>% .[[1]] %>% as.tibble()
+```
+
+We will convert all training and testing data sets and convert to tibble.
+```{r}
+cv_df = cv_df %>% 
+mutate(train = map(train, as_tibble),
+       test = map(test, as_tibble))
+```
+
+Let's try to fit models and get RMSEs for them
+
+```{r}
+cv_df = cv_df %>% 
+  mutate(
+    linear_mod = map(.x = train, ~lm(y ~ x, data = .x)),
+    smooth_mod = map(.x = train, ~gam(y ~ s(x), data = .x)),
+    wiggly_mod = map(.x = train, ~gam(y ~ s(x, k = 30), sp = 10e-6, data = .x))) %>% 
+# i not have lists containing model info for each of the cross validations. USE map2 for TWO vars going into the map
+  mutate(
+    rmse_linear = map2(.x = linear_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_smooth = map2(.x = smooth_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_wiggly = map2(.x = wiggly_mod, .y = test, ~rmse(model = .x, data = .y))
+  )
+  #pull(rmse_linear) # this is shows all the rsme for the linear models we are cross validating.
+
+```
+
