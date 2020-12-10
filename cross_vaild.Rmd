@@ -132,8 +132,42 @@ cv_df = cv_df %>%
     rmse_linear = map2(.x = linear_mod, .y = test, ~rmse(model = .x, data = .y)),
     rmse_smooth = map2(.x = smooth_mod, .y = test, ~rmse(model = .x, data = .y)),
     rmse_wiggly = map2(.x = wiggly_mod, .y = test, ~rmse(model = .x, data = .y))
-  )
+  ) %>% 
+   unnest(rmse_linear, rmse_smooth, rmse_wiggly)
+
   #pull(rmse_linear) # this is shows all the rsme for the linear models we are cross validating.
 
 ```
+
+What doe these results dae about the model choices?
+
+```{r}
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model",
+    values_to = "rmse",
+    names_prefix = "rmse_"
+  ) %>% 
+  ggplot(aes(x = model, y = rmse)) +
+  geom_violin()
+```
+Among the three models we're using, the smooth model is doing the best.
+
+Comput averages:
+
+```{r}
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model",
+    values_to = "rmse",
+    names_prefix = "rmse_"
+  ) %>% 
+  group_by(model) %>% 
+  summarize(avg_rmse = mean(rmse))
+```
+
 
