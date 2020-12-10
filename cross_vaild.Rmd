@@ -170,4 +170,84 @@ cv_df %>%
   summarize(avg_rmse = mean(rmse))
 ```
 
+## Try a real dataset
 
+import data
+
+```{r}
+child_growth = read_csv("./data/nepalese_children.csv") %>% 
+  # do a change point model with this:
+  mutate(
+    weight_cp = (weight > 7) * (weight - 7)
+  )
+```
+
+weight vs arm circumference
+
+```{r}
+child_growth %>% 
+  ggplot(aes(x = weight, y = armc)) +
+  geom_point(alpha = 0.3)
+```
+
+We will do two models: 
+1. Straight linear model
+2. linear model with a change point, where the slope changes after some point. PEICE WISE LINEAR MODEL!!!!
+
+```{r}
+linear_mod = lm(armc ~ weight, data = child_growth)
+pwlin_mod = lm(armc ~ weight + weight_cp, data = child_growth)
+smooth_mod = gam(armc ~ s(weight), data = child_growth)
+```
+
+
+Get child df, gather predicitons and make a plot
+
+```{r}
+child_growth %>% 
+  gather_predictions(linear_mod, pwlin_mod, smooth_mod) %>% 
+  ggplot(aes(x = weight, y = armc)) +
+  geom_point(alpha = 0.3) +
+  geom_line(aes(y = pred), color = "red") +
+  facet_grid(. ~ model)
+```
+
+Now we want to cross validate again. Try to understand model fit using cross validation
+
+```{r}
+cv_df = 
+  crossv_mc(child_growth, 100) %>% 
+  mutate(train = map(train, as_tibble),
+       test = map(test, as_tibble)) # this is necessary bc we are fitting the gam model. Would not have to do this mutate step othewise. 
+```
+
+```{r}
+cv_df = cv_df %>% 
+  mutate(
+    linear_mod = map(.x = train, ~lm(armc ~ weight, data = .x)),
+    pwlin_mod = map(.x = train, ~lm(armc ~ weight + weight_cp, data = .x)),
+    smooth_mod = map(.x = train, ~gam(armc ~ s(weight), data = .x))) %>% 
+  mutate(
+    rmse_linear = map2_dbl(.x = linear_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_pwlin = map2_dbl(.x = pwlin_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_smooth = map2_dbl(.x = smooth_mod, .y = test, ~rmse(model = .x, data = .y))
+  )
+```
+
+Plot it
+
+```{r}
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model",
+    values_to = "rmse",
+    names_prefix = "rmse_"
+  ) %>% 
+  ggplot(aes(x = model, y = rmse)) +
+  geom_violin()
+```
+
+Which to pick?
+Jeff likes piece wise bc the interpretation is much more clear than in smooth. Smooth model is more correct, but prob harder to interpret.
