@@ -198,3 +198,68 @@ sim_df_const %>%
   )
 ```
 
+
+## revisit nyc airbnb
+
+```{r}
+data("nyc_airbnb")
+
+airbnb = nyc_airbnb %>% 
+  mutate(stars = review_scores_location / 2) %>% 
+  rename(
+    boro = neighbourhood_group,
+    neighborhood = neighbourhood) %>% 
+  filter(boro != "Staten Island") %>% 
+  select(price, stars, boro, neighborhood, room_type)
+```
+
+What we did in lin models:
+
+```{r}
+airbnb %>% 
+  ggplot(aes(x = stars, y = price, color = boro)) +
+  geom_point()
+```
+I does look like this is a nonlinear model. 
+
+```{r}
+airbnb_boot_results = airbnb %>%
+  filter(boro == "Manhattan") %>% 
+  drop_na(stars) %>% 
+  bootstrap(1000, id = "strap_num") %>% 
+  mutate(
+    models = map(.x = strap, ~lm(price ~ stars, data = .x)), 
+    results = map(models, broom::tidy)
+  ) %>% 
+  select(strap_num, results) %>% 
+  unnest(results) 
+
+airbnb_boot_results %>% 
+  group_by(term) %>% 
+  summarize(
+    mean_est = mean(estimate),
+    sd_est = sd(estimate)
+  )
+```
+
+
+Compare this to `lm`
+
+```{r}
+airbnb %>%
+  filter(boro == "Manhattan") %>% 
+  drop_na(stars) %>%
+  lm(price ~ stars, data = .) %>% 
+  broom::tidy()
+```
+Compare: lm tells me that assuming constant variance the slope should be 4.7, but under bootstrap, that does not assume constant variance, the slope is ~6.5. It is higher under bootstrap than under the constant variance assumption. 
+
+
+```{r}
+airbnb_boot_results %>% 
+  filter(term == "stars") %>% 
+  ggplot(aes(x = estimate)) +
+  geom_density()
+
+```
+
