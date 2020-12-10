@@ -102,8 +102,8 @@ lm(y ~ x, data = sim_df_const) %>% broom::tidy()
     ## # A tibble: 2 x 5
     ##   term        estimate std.error statistic   p.value
     ##   <chr>          <dbl>     <dbl>     <dbl>     <dbl>
-    ## 1 (Intercept)     2.15    0.0890      24.1 5.70e- 67
-    ## 2 x               2.89    0.0632      45.8 6.52e-123
+    ## 1 (Intercept)     1.95    0.0878      22.2 6.72e- 61
+    ## 2 x               3.02    0.0626      48.1 7.68e-128
 
 ``` r
 lm(y ~ x, data = sim_df_nonconst) %>% broom::tidy()
@@ -112,8 +112,8 @@ lm(y ~ x, data = sim_df_nonconst) %>% broom::tidy()
     ## # A tibble: 2 x 5
     ##   term        estimate std.error statistic   p.value
     ##   <chr>          <dbl>     <dbl>     <dbl>     <dbl>
-    ## 1 (Intercept)     2.04    0.0894      22.8 1.03e- 62
-    ## 2 x               2.91    0.0635      45.8 5.76e-123
+    ## 1 (Intercept)     2.06    0.0922      22.3 2.40e- 61
+    ## 2 x               2.93    0.0657      44.6 2.38e-120
 
 The assumptions used to build the model are wrong. There is uncertainty
 in the estimates. How much? lets figure that out
@@ -161,5 +161,140 @@ boot_samp(sim_df_nonconst) %>%
     ## # A tibble: 2 x 5
     ##   term        estimate std.error statistic   p.value
     ##   <chr>          <dbl>     <dbl>     <dbl>     <dbl>
-    ## 1 (Intercept)     2.09    0.0992      21.1 2.81e- 57
-    ## 2 x               2.79    0.0709      39.4 9.95e-109
+    ## 1 (Intercept)     2.11    0.104       20.3 1.35e- 54
+    ## 2 x               2.89    0.0736      39.3 1.58e-108
+
+## Many samples and analysis
+
+``` r
+boot_straps = 
+  tibble(
+    strap_num = 1:1000,
+    strap_samp = rerun(1000, boot_samp(sim_df_nonconst))
+  )
+
+#boot_straps %>% pull(strap_samp) %>% .[[3]]
+# above line lets us look at the each tible for the rows
+```
+
+Can I run my analysis on these\>\>
+
+``` r
+boot_results = 
+  boot_straps %>% 
+  mutate(
+    models = map(.x = strap_samp, ~lm(y ~ x, data = .x)), 
+    results = map(models, broom::tidy)
+  ) %>% 
+  select(strap_num, results) %>% 
+  unnest(results)
+```
+
+What do I have now? Usually, the std error and pvalue are computed under
+usual assumptions.
+
+``` r
+boot_results %>% 
+  group_by(term) %>% 
+  summarize(
+    mean_est = mean(estimate),
+    sd_est = sd(estimate)
+  )
+```
+
+    ## `summarise()` ungrouping output (override with `.groups` argument)
+
+    ## # A tibble: 2 x 3
+    ##   term        mean_est sd_est
+    ##   <chr>          <dbl>  <dbl>
+    ## 1 (Intercept)     2.06 0.0596
+    ## 2 x               2.93 0.0834
+
+Look at distributions: lots of uncertainty here if you tried to lit this
+it a linear model
+
+``` r
+boot_results %>% 
+  filter(term == "x") %>% 
+  ggplot(aes(x = estimate)) +
+  geom_density()
+```
+
+<img src="bootstraping_files/figure-gfm/unnamed-chunk-11-1.png" width="90%" />
+
+Construct bootstrap CI
+
+``` r
+boot_results %>% 
+  group_by(term) %>% 
+  summarize(
+    ci_lower = quantile(estimate, 0.025),
+    ci_upper = quantile(estimate, 0.075)
+  )
+```
+
+    ## `summarise()` ungrouping output (override with `.groups` argument)
+
+    ## # A tibble: 2 x 3
+    ##   term        ci_lower ci_upper
+    ##   <chr>          <dbl>    <dbl>
+    ## 1 (Intercept)     1.94     1.97
+    ## 2 x               2.77     2.82
+
+## Bootstrap using `modelr`
+
+Can we simplify anything? yes, obvi
+
+``` r
+sim_df_nonconst %>% 
+  bootstrap(1000, id = "strap_num") %>% 
+  mutate(
+    models = map(.x = strap, ~lm(y ~ x, data = .x)), 
+    results = map(models, broom::tidy)
+  ) %>% 
+  select(strap_num, results) %>% 
+  unnest(results) %>% 
+  group_by(term) %>% 
+  summarize(
+    mean_est = mean(estimate),
+    sd_est = sd(estimate)
+  )
+```
+
+    ## `summarise()` ungrouping output (override with `.groups` argument)
+
+    ## # A tibble: 2 x 3
+    ##   term        mean_est sd_est
+    ##   <chr>          <dbl>  <dbl>
+    ## 1 (Intercept)     2.06 0.0580
+    ## 2 x               2.93 0.0856
+
+These are a little diff bc we’re drawing 1000 samples and they won’t be
+the same every time. If we were to write a paper, we would crank up the
+iterations a lot.
+
+## Does bootstrap do anything if your assumptions are met? like a reg linear sample?? Yes. If assumptions are true, you can do reg lm stuff and bootstrap stuff
+
+``` r
+sim_df_const %>% 
+  bootstrap(1000, id = "strap_num") %>% 
+  mutate(
+    models = map(.x = strap, ~lm(y ~ x, data = .x)), 
+    results = map(models, broom::tidy)
+  ) %>% 
+  select(strap_num, results) %>% 
+  unnest(results) %>% 
+  group_by(term) %>% 
+  summarize(
+    mean_est = mean(estimate),
+    sd_est = sd(estimate)
+  )
+```
+
+    ## `summarise()` ungrouping output (override with `.groups` argument)
+
+    ## # A tibble: 2 x 3
+    ##   term        mean_est sd_est
+    ##   <chr>          <dbl>  <dbl>
+    ## 1 (Intercept)     1.95 0.0879
+    ## 2 x               3.02 0.0634

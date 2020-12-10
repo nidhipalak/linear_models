@@ -99,3 +99,102 @@ boot_samp(sim_df_nonconst) %>%
   broom::tidy()
 ```
 
+## Many samples and analysis
+
+```{r}
+boot_straps = 
+  tibble(
+    strap_num = 1:1000,
+    strap_samp = rerun(1000, boot_samp(sim_df_nonconst))
+  )
+
+#boot_straps %>% pull(strap_samp) %>% .[[3]]
+# above line lets us look at the each tible for the rows
+```
+
+Can I run my analysis on these>>
+```{r}
+boot_results = 
+  boot_straps %>% 
+  mutate(
+    models = map(.x = strap_samp, ~lm(y ~ x, data = .x)), 
+    results = map(models, broom::tidy)
+  ) %>% 
+  select(strap_num, results) %>% 
+  unnest(results)
+```
+
+What do I have now?
+Usually, the std error and pvalue are computed under usual assumptions. 
+
+```{r}
+boot_results %>% 
+  group_by(term) %>% 
+  summarize(
+    mean_est = mean(estimate),
+    sd_est = sd(estimate)
+  )
+```
+
+Look at distributions:
+lots of uncertainty here if you tried to lit this it a linear model
+
+```{r}
+boot_results %>% 
+  filter(term == "x") %>% 
+  ggplot(aes(x = estimate)) +
+  geom_density()
+```
+
+Construct bootstrap CI
+
+```{r}
+boot_results %>% 
+  group_by(term) %>% 
+  summarize(
+    ci_lower = quantile(estimate, 0.025),
+    ci_upper = quantile(estimate, 0.075)
+  )
+```
+
+
+## Bootstrap using `modelr`
+
+Can we simplify anything? yes, obvi
+
+```{r}
+sim_df_nonconst %>% 
+  bootstrap(1000, id = "strap_num") %>% 
+  mutate(
+    models = map(.x = strap, ~lm(y ~ x, data = .x)), 
+    results = map(models, broom::tidy)
+  ) %>% 
+  select(strap_num, results) %>% 
+  unnest(results) %>% 
+  group_by(term) %>% 
+  summarize(
+    mean_est = mean(estimate),
+    sd_est = sd(estimate)
+  )
+```
+These are a little diff bc we're drawing 1000 samples and they won't be the same every time.  If we were to write a paper, we would crank up the iterations a lot.
+
+
+## Does bootstrap do anything if your assumptions are met? like a reg linear sample?? Yes. If assumptions are true, you can do reg lm stuff and bootstrap stuff
+
+```{r}
+sim_df_const %>% 
+  bootstrap(1000, id = "strap_num") %>% 
+  mutate(
+    models = map(.x = strap, ~lm(y ~ x, data = .x)), 
+    results = map(models, broom::tidy)
+  ) %>% 
+  select(strap_num, results) %>% 
+  unnest(results) %>% 
+  group_by(term) %>% 
+  summarize(
+    mean_est = mean(estimate),
+    sd_est = sd(estimate)
+  )
+```
+
