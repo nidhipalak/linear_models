@@ -102,8 +102,8 @@ lm(y ~ x, data = sim_df_const) %>% broom::tidy()
     ## # A tibble: 2 x 5
     ##   term        estimate std.error statistic   p.value
     ##   <chr>          <dbl>     <dbl>     <dbl>     <dbl>
-    ## 1 (Intercept)     1.95    0.0878      22.2 6.72e- 61
-    ## 2 x               3.02    0.0626      48.1 7.68e-128
+    ## 1 (Intercept)     2.06    0.0764      27.0 1.09e- 75
+    ## 2 x               2.98    0.0548      54.4 6.61e-140
 
 ``` r
 lm(y ~ x, data = sim_df_nonconst) %>% broom::tidy()
@@ -112,8 +112,8 @@ lm(y ~ x, data = sim_df_nonconst) %>% broom::tidy()
     ## # A tibble: 2 x 5
     ##   term        estimate std.error statistic   p.value
     ##   <chr>          <dbl>     <dbl>     <dbl>     <dbl>
-    ## 1 (Intercept)     2.06    0.0922      22.3 2.40e- 61
-    ## 2 x               2.93    0.0657      44.6 2.38e-120
+    ## 1 (Intercept)     1.99    0.0794      25.1 6.58e- 70
+    ## 2 x               3.03    0.0569      53.2 1.48e-137
 
 The assumptions used to build the model are wrong. There is uncertainty
 in the estimates. How much? lets figure that out
@@ -148,6 +148,10 @@ boot_samp(sim_df_nonconst) %>%
 
     ## `geom_smooth()` using formula 'y ~ x'
 
+    ## Warning: Removed 1 rows containing non-finite values (stat_smooth).
+
+    ## Warning: Removed 1 rows containing missing values (geom_point).
+
 <img src="bootstraping_files/figure-gfm/unnamed-chunk-6-1.png" width="90%" />
 What we get: a df of 250, we get some info and some repeated info
 (because it has replacement)
@@ -161,8 +165,8 @@ boot_samp(sim_df_nonconst) %>%
     ## # A tibble: 2 x 5
     ##   term        estimate std.error statistic   p.value
     ##   <chr>          <dbl>     <dbl>     <dbl>     <dbl>
-    ## 1 (Intercept)     2.11    0.104       20.3 1.35e- 54
-    ## 2 x               2.89    0.0736      39.3 1.58e-108
+    ## 1 (Intercept)     2.02    0.0735      27.4 4.06e- 77
+    ## 2 x               3.03    0.0525      57.7 1.03e-145
 
 ## Many samples and analysis
 
@@ -207,8 +211,8 @@ boot_results %>%
     ## # A tibble: 2 x 3
     ##   term        mean_est sd_est
     ##   <chr>          <dbl>  <dbl>
-    ## 1 (Intercept)     2.06 0.0596
-    ## 2 x               2.93 0.0834
+    ## 1 (Intercept)     1.99 0.0534
+    ## 2 x               3.02 0.0794
 
 Look at distributions: lots of uncertainty here if you tried to lit this
 it a linear model
@@ -238,8 +242,8 @@ boot_results %>%
     ## # A tibble: 2 x 3
     ##   term        ci_lower ci_upper
     ##   <chr>          <dbl>    <dbl>
-    ## 1 (Intercept)     1.94     1.97
-    ## 2 x               2.77     2.82
+    ## 1 (Intercept)     1.89     1.91
+    ## 2 x               2.88     2.91
 
 ## Bootstrap using `modelr`
 
@@ -266,8 +270,8 @@ sim_df_nonconst %>%
     ## # A tibble: 2 x 3
     ##   term        mean_est sd_est
     ##   <chr>          <dbl>  <dbl>
-    ## 1 (Intercept)     2.06 0.0580
-    ## 2 x               2.93 0.0856
+    ## 1 (Intercept)     1.99 0.0542
+    ## 2 x               3.03 0.0803
 
 These are a little diff bc we’re drawing 1000 samples and they won’t be
 the same every time. If we were to write a paper, we would crank up the
@@ -296,5 +300,90 @@ sim_df_const %>%
     ## # A tibble: 2 x 3
     ##   term        mean_est sd_est
     ##   <chr>          <dbl>  <dbl>
-    ## 1 (Intercept)     1.95 0.0879
-    ## 2 x               3.02 0.0634
+    ## 1 (Intercept)     2.06 0.0752
+    ## 2 x               2.98 0.0553
+
+## revisit nyc airbnb
+
+``` r
+data("nyc_airbnb")
+
+airbnb = nyc_airbnb %>% 
+  mutate(stars = review_scores_location / 2) %>% 
+  rename(
+    boro = neighbourhood_group,
+    neighborhood = neighbourhood) %>% 
+  filter(boro != "Staten Island") %>% 
+  select(price, stars, boro, neighborhood, room_type)
+```
+
+What we did in lin models:
+
+``` r
+airbnb %>% 
+  ggplot(aes(x = stars, y = price, color = boro)) +
+  geom_point()
+```
+
+    ## Warning: Removed 9962 rows containing missing values (geom_point).
+
+<img src="bootstraping_files/figure-gfm/unnamed-chunk-16-1.png" width="90%" />
+I does look like this is a nonlinear model.
+
+``` r
+airbnb_boot_results = airbnb %>%
+  filter(boro == "Manhattan") %>% 
+  drop_na(stars) %>% 
+  bootstrap(1000, id = "strap_num") %>% 
+  mutate(
+    models = map(.x = strap, ~lm(price ~ stars, data = .x)), 
+    results = map(models, broom::tidy)
+  ) %>% 
+  select(strap_num, results) %>% 
+  unnest(results) 
+
+airbnb_boot_results %>% 
+  group_by(term) %>% 
+  summarize(
+    mean_est = mean(estimate),
+    sd_est = sd(estimate)
+  )
+```
+
+    ## `summarise()` ungrouping output (override with `.groups` argument)
+
+    ## # A tibble: 2 x 3
+    ##   term        mean_est sd_est
+    ##   <chr>          <dbl>  <dbl>
+    ## 1 (Intercept)    -35.7  33.1 
+    ## 2 stars           43.6   6.72
+
+Compare this to `lm`
+
+``` r
+airbnb %>%
+  filter(boro == "Manhattan") %>% 
+  drop_na(stars) %>%
+  lm(price ~ stars, data = .) %>% 
+  broom::tidy()
+```
+
+    ## # A tibble: 2 x 5
+    ##   term        estimate std.error statistic  p.value
+    ##   <chr>          <dbl>     <dbl>     <dbl>    <dbl>
+    ## 1 (Intercept)    -34.3     22.9      -1.50 1.35e- 1
+    ## 2 stars           43.3      4.78      9.07 1.39e-19
+
+Compare: lm tells me that assuming constant variance the slope should be
+4.7, but under bootstrap, that does not assume constant variance, the
+slope is \~6.5. It is higher under bootstrap than under the constant
+variance assumption.
+
+``` r
+airbnb_boot_results %>% 
+  filter(term == "stars") %>% 
+  ggplot(aes(x = estimate)) +
+  geom_density()
+```
+
+<img src="bootstraping_files/figure-gfm/unnamed-chunk-19-1.png" width="90%" />
